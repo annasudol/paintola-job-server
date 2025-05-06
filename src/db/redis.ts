@@ -2,6 +2,14 @@ import { Redis } from "ioredis"
 import dotenv from "dotenv"
 dotenv.config()
 
-export const redisConnection = new Redis(process.env.REDIS_URL!, {
+const redisUrl = process.env.REDIS_URL
+if (!redisUrl) {
+  throw new Error("REDIS_URL is not defined in environment variables.")
+}
+
+/**
+ * Redis connection for BullMQ queues and caching.
+ */
+export const redisConnection = new Redis(redisUrl, {
   maxRetriesPerRequest: null,
 })

@@ -7,113 +7,101 @@ export const imageQueue = new Queue("image-generation", {
   connection: redisConnection,
   blockingConnection: false,
 })
-console.log("🚀 QueueEventListeners initialized and listening...")
+console.log("🚀 Queue and QueueEvents initialized.")
 
+/**
+ * Initialize BullMQ queue event listeners.
+ */
 export const initQueueEventListeners = () => {
   const events = new QueueEvents("image-generation", {
     connection: redisConnection,
     blockingTimeout: 30000,
   })
 
-  // ✅ When job becomes active (picked up by Worker)
+  // 🔥 ACTIVE EVENT
   events.on("active", async ({ jobId }) => {
     console.log("⚙️ [QueueEvent:active] Job picked up:", jobId)
 
-    try {
-      const jobData = await imageQueue.getJob(jobId)
-      if (!jobData) {
-        console.log(`⚠️ [QueueEvent:active] No jobData found for ID: ${jobId}`)
-        return
-      }
+    const dbJob = await getJobAndData(jobId)
+    if (!dbJob) return
 
-      const realJobId = jobData.data.jobId
-
-      const dbJob = await prisma.job.findUnique({ where: { id: realJobId } })
-
-      if (!dbJob || !dbJob.userId) {
-        console.log(`⚠️ [QueueEvent:active] No DB record for real jobId: ${realJobId}`)
-        return
-      }
-
-      const io = getIO()
-      console.log(`📢 [QueueEvent:active] Emitting 'job:progress' to user:${dbJob.userId}`)
-      io.to(`user:${dbJob.userId}`).emit("job:progress", {
-        id: dbJob.id,
-        status: "PROCESSING",
-        progress: dbJob.progress ?? 10,
-      })
-    } catch (err) {
-      console.error("❌ [QueueEvent:active] Error:", err)
-    }
+    const io = getIO()
+    io.to(`user:${dbJob.userId}`).emit("job:progress", {
+      id: dbJob.id,
+      status: "PROCESSING",
+      progress: dbJob.progress ?? 10,
+    })
+    console.log(`📢 Emitted 'job:progress' to user:${dbJob.userId}`)
   })
 
-  // ✅ When job completed
+  // 🔥 COMPLETED EVENT
   events.on("completed", async ({ jobId }) => {
-    console.log("🧪 [QueueEvent:completed] Job completed:", jobId)
+    console.log("✅ [QueueEvent:completed] Job completed:", jobId)
 
-    try {
-      const jobData = await imageQueue.getJob(jobId)
-      if (!jobData) {
-        console.log(`⚠️ [QueueEvent:completed] No jobData found for ID: ${jobId}`)
-        return
-      }
+    const dbJob = await getJobAndData(jobId)
+    if (!dbJob) return
 
-      const realJobId = jobData.data.jobId
+    const generateImage = await prisma.generatedImage.findUnique({
+      where: { jobId: dbJob.id },
+    })
 
-      const dbJob = await prisma.job.findUnique({ where: { id: realJobId } })
-      const generateImage = await prisma.generatedImage.findUnique({
-        where: { jobId: realJobId },
-      })
+    const io = getIO()
+    io.to(`user:${dbJob.userId}`).emit("job:completed", {
+      id: dbJob.id,
+      generateId: generateImage?.id,
+      status: dbJob.status,
+      progress: dbJob.progress ?? 100,
+      imageUrl: dbJob.imageUrl,
+      error: dbJob.error,
+    })
 
-      if (!dbJob || !dbJob.userId) {
-        console.log(`⚠️ [QueueEvent:completed] No DB record for real jobId: ${realJobId}`)
-        return
-      }
-
-      const io = getIO()
-      console.log(`📢 [QueueEvent:completed] Emitting 'job:completed' to user:${dbJob.userId}`)
-      io.to(`user:${dbJob.userId}`).emit("job:completed", {
-        id: dbJob.id,
-        generateId: generateImage?.id,
-        status: dbJob.status,
-        progress: dbJob.progress ?? 100,
-        imageUrl: dbJob.imageUrl,
-        error: dbJob.error,
-      })
-    } catch (err) {
-      console.error("❌ [QueueEvent:completed] Error:", err)
-    }
+    console.log(`📢 Emitted 'job:completed' to user:${dbJob.userId}`)
   })
 
-  // ✅ When job fails
+  // 🔥 FAILED EVENT
   events.on("failed", async ({ jobId, failedReason }) => {
     console.log("❌ [QueueEvent:failed] Job failed:", jobId, "| Reason:", failedReason)
 
-    try {
-      const jobData = await imageQueue.getJob(jobId)
-      if (!jobData) {
-        console.log(`⚠️ [QueueEvent:failed] No jobData found for ID: ${jobId}`)
-        return
-      }
+    const dbJob = await getJobAndData(jobId)
+    if (!dbJob) return
 
-      const realJobId = jobData.data.jobId
+    const io = getIO()
+    io.to(`user:${dbJob.userId}`).emit("job:failed", {
+      id: dbJob.id,
+      status: "FAILED",
+      error: dbJob.error || failedReason,
+    })
 
-      const dbJob = await prisma.job.findUnique({ where: { id: realJobId } })
-
-      if (!dbJob || !dbJob.userId) {
-        console.log(`⚠️ [QueueEvent:failed] No DB record for real jobId: ${realJobId}`)
-        return
-      }
-
-      const io = getIO()
-      console.log(`📢 [QueueEvent:failed] Emitting 'job:failed' to user:${dbJob.userId}`)
-      io.to(`user:${dbJob.userId}`).emit("job:failed", {
-        id: dbJob.id,
-        status: "FAILED",
-        error: dbJob.error || failedReason,
-      })
-    } catch (err) {
-      console.error("❌ [QueueEvent:failed] Error:", err)
-    }
+    console.log(`📢 Emitted 'job:failed' to user:${dbJob.userId}`)
   })
+}
+
+/**
+ * Helper: Fetch jobData → DB job record safely.
+ */
+async function getJobAndData(queueJobId: string) {
+  try {
+    const jobData = await imageQueue.getJob(queueJobId)
+    if (!jobData) {
+      console.warn(`⚠️ No jobData found for queue ID: ${queueJobId}`)
+      return null
+    }
+
+    const realJobId = jobData.data?.jobId
+    if (!realJobId) {
+      console.warn(`⚠️ jobData.data.jobId missing for queue ID: ${queueJobId}`)
+      return null
+    }
+
+    const dbJob = await prisma.job.findUnique({ where: { id: realJobId } })
+    if (!dbJob || !dbJob.userId) {
+      console.warn(`⚠️ No DB job found for jobId: ${realJobId}`)
+      return null
+    }
+
+    return dbJob
+  } catch (err) {
+    console.error(`❌ Error fetching job record for queue ID: ${queueJobId}`, err)
+    return null
+  }
 }
