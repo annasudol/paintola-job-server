@@ -1,5 +1,11 @@
 import cloudinary from "../config/cloudinary"
 
+/**
+ * Uploads an image from a public URL to Cloudinary.
+ * @param {string} imageUrl - The URL of the image to upload.
+ * @param {string} userId - The ID of the user (for naming purposes).
+ * @returns {Promise<string>} - The Cloudinary secure URL.
+ */
 export const uploadImageFromUrl = async (imageUrl: string, userId: string): Promise<string> => {
   const timestamp = Date.now()
   const filename = `${userId}-${timestamp}`
@@ -20,12 +26,17 @@ export const uploadImageFromUrl = async (imageUrl: string, userId: string): Prom
   }
 }
 
-// For remix image uploads (from buffer/file)
+/**
+ * Uploads an image from a file buffer (e.g., uploaded by user) to Cloudinary.
+ * @param {Express.Multer.File} file - The file object.
+ * @param {string} userId - The ID of the user.
+ * @returns {Promise<string>} - The Cloudinary secure URL.
+ */
 export const uploadImageFromFile = async (
   file: Express.Multer.File,
   userId: string
 ): Promise<string> => {
-  const timestamp = Date.now() // Optional but useful for debugging/tracing
+  const timestamp = Date.now()
   const filename = `${userId}-${timestamp}`
 
   return new Promise((resolve, reject) => {
@@ -36,7 +47,7 @@ export const uploadImageFromFile = async (
           public_id: filename,
           use_filename: false,
           unique_filename: false,
-          overwrite: false, // prevent any overwrite
+          overwrite: false,
         },
         (err, result) => {
           if (err || !result) {

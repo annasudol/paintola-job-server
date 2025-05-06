@@ -19,6 +19,11 @@ export interface SharedJobInput {
   is_published?: boolean
 }
 
+/**
+ * Creates a Job record in the database.
+ * @param {SharedJobInput} input - The job data to save.
+ * @returns {Promise<string>} - The ID of the created job.
+ */
 export const createJobRecord = async (input: SharedJobInput): Promise<string> => {
   const {
     prompt,
@@ -75,6 +80,12 @@ const aspectRatioToEnum = (value?: string): any => {
   if (!value) return undefined
   return value as any
 }
+
+/**
+ * Fetches a job by ID from the database.
+ * @param {string} jobId - The ID of the job.
+ * @returns {Promise<Job|null>}
+ */
 
 export const getJobById = async (jobId: string) => {
   return await prisma.job.findUnique({ where: { id: jobId } })
