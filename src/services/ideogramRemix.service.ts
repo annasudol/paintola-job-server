@@ -26,6 +26,13 @@ interface ResponseType {
   prompt: string
 }
 
+/**
+ * Sends a remix request to Ideogram's /remix endpoint.
+ * Downloads the reference image first, attaches to the request.
+ * @param {RemixOptions} params - Remix generation options.
+ * @returns {Promise<ResponseType>}
+ */
+
 export const generateRemixFromPrompt = async ({
   prompt,
   image_input_url,

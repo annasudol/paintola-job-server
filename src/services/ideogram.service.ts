@@ -23,6 +23,11 @@ interface ResponseType {
   prompt: string
 }
 
+/**
+ * Sends a request to Ideogram's /generate endpoint to create an image.
+ * @param {GenerateOptions} options - Options for image generation.
+ * @returns {Promise<ResponseType>}
+ */
 export const generateImageFromPrompt = async (options: GenerateOptions): Promise<ResponseType> => {
   const {
     prompt,
